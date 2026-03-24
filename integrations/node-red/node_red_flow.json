@@ -1,0 +1,810 @@
+[
+    {
+        "id": "3932f41790e8850a",
+        "type": "tab",
+        "label": "NatuurSpotter - Flow 1 (Dashboard Reads Files)",
+        "disabled": false,
+        "info": ""
+    },
+    {
+        "id": "a6f6924677265583",
+        "type": "function",
+        "z": "3932f41790e8850a",
+        "name": "function 1",
+        "func": "let data = msg.payload;\n\nlet year = data.year;\nlet month = data.month;\nlet day = data.day;\n\nflow.set(\"year\", year);\nflow.set(\"month\", month);\nflow.set(\"day\", day);\n\nif (!year || !month || !day) {\n    msg.payload = \"-c \\\"print('Missing year/month/day')\\\"\";\n    return msg;\n}\n\nlet py = \"\";\npy += \"from natuurspotter import biodiversity_analysis, observations_map\\n\";\npy += \"year = \" + year + \"\\n\";\npy += \"month = \" + month + \"\\n\";\npy += \"day = '\" + day + \"'\\n\";\npy += \"biodiversity_analysis(month=month, year=year)\\n\";\npy += \"observations_map(day)\\n\";\npy += \"print('DONE')\\n\";\n\nmsg.payload =\n    \"-c \\\"\" +\n    py.replace(/\"/g, \"\\\\\\\"\").replace(/\\n/g, \"; \") +\n    \"\\\"\";\n\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 780,
+        "y": 400,
+        "wires": [
+            [
+                "41fd96776207b310"
+            ]
+        ]
+    },
+    {
+        "id": "41fd96776207b310",
+        "type": "exec",
+        "z": "3932f41790e8850a",
+        "command": "/Users/thomasgatse/.venvs/natuurspotter/bin/python",
+        "addpay": "payload",
+        "append": "",
+        "useSpawn": "false",
+        "timer": "",
+        "winHide": false,
+        "oldrc": false,
+        "name": "RUN natuurspotter",
+        "x": 970,
+        "y": 400,
+        "wires": [
+            [
+                "74badb7dbc279c38",
+                "ea10b762ce8da3d5",
+                "275c602480bedfb7"
+            ],
+            [
+                "79d77be7d3bf901b",
+                "dfd16bfc3b28265e"
+            ],
+            []
+        ]
+    },
+    {
+        "id": "74badb7dbc279c38",
+        "type": "debug",
+        "z": "3932f41790e8850a",
+        "name": "output1",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1260,
+        "y": 380,
+        "wires": []
+    },
+    {
+        "id": "dfd16bfc3b28265e",
+        "type": "debug",
+        "z": "3932f41790e8850a",
+        "name": "output2",
+        "active": true,
+        "tosidebar": true,
+        "console": true,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1320,
+        "y": 480,
+        "wires": []
+    },
+    {
+        "id": "043e2586072faa54",
+        "type": "debug",
+        "z": "3932f41790e8850a",
+        "name": "summaryfilD",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1470,
+        "y": 540,
+        "wires": []
+    },
+    {
+        "id": "ea10b762ce8da3d5",
+        "type": "function",
+        "z": "3932f41790e8850a",
+        "name": "summaryfile ",
+        "func": "\nlet year = flow.get(\"year\");\nlet month = flow.get(\"month\");\n\nif (!year || !month) {\n    msg.payload = \"Missing year/month for sumfile\";\n    return msg;\n}\n\nyear = String(year).trim();\nmonth = Number(month);\n\nlet mm = String(month);\nif (mm.length === 1) {\n    mm = \"0\" + mm;\n}\n\nmsg.filename = \"/Users/thomasgatse/output/biodiversity_summary_\" + year + \"-\" + mm + \".csv\";\n\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1390,
+        "y": 440,
+        "wires": [
+            [
+                "701bb9fe73de2309",
+                "043e2586072faa54"
+            ]
+        ]
+    },
+    {
+        "id": "701bb9fe73de2309",
+        "type": "file in",
+        "z": "3932f41790e8850a",
+        "name": "Read biodiversitysummary",
+        "filename": "filename",
+        "filenameType": "msg",
+        "format": "utf8",
+        "chunk": false,
+        "sendError": false,
+        "encoding": "none",
+        "allProps": false,
+        "x": 1640,
+        "y": 400,
+        "wires": [
+            [
+                "b853299982166592"
+            ]
+        ]
+    },
+    {
+        "id": "b853299982166592",
+        "type": "csv",
+        "z": "3932f41790e8850a",
+        "name": "biodiversity",
+        "spec": "",
+        "sep": ",",
+        "hdrin": true,
+        "hdrout": "none",
+        "multi": "mult",
+        "ret": "\\n",
+        "temp": "",
+        "skip": "0",
+        "strings": true,
+        "include_empty_strings": "",
+        "include_null_values": "",
+        "x": 1870,
+        "y": 400,
+        "wires": [
+            [
+                "7341c3ab9e3bc630"
+            ]
+        ]
+    },
+    {
+        "id": "7341c3ab9e3bc630",
+        "type": "function",
+        "z": "3932f41790e8850a",
+        "name": "getting sum data",
+        "func": "let rows = msg.payload;\n\nif (!Array.isArray(rows)) {\n    msg.payload = [];\n    return msg;\n}\n\nif (rows.length === 0) {\n    msg.payload = [];\n    return msg;\n}\n\nmsg.payload = rows;\n\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1670,
+        "y": 500,
+        "wires": [
+            [
+                "d73dad140f0e081a"
+            ]
+        ]
+    },
+    {
+        "id": "d73dad140f0e081a",
+        "type": "function",
+        "z": "3932f41790e8850a",
+        "name": "summary",
+        "func": "let rows = msg.payload;\n\n\nif (!Array.isArray(rows) || rows.length === 0) {\n    return null;\n}\n\nlet r = rows[0];\n\n\nlet m1 = {};\nm1.payload = Number(r.totalObservations);\n\nlet m2 = {};\nm2.payload = Number(r.species_richness);\n\nlet m3 = {};\nlet simpson = Number(r.simpson_diversity);\nm3.payload = Math.round(simpson * 1000) / 1000;  \n\nlet m4 = {};\nlet shannon = Number(r.shannon_diversity);\nm4.payload = Math.round(shannon * 100) / 100;     \n\nlet m5 = {};\nm5.payload = String(r.most_observed_species);\n\nreturn [m1, m2, m3, m4, m5];",
+        "outputs": 5,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1880,
+        "y": 540,
+        "wires": [
+            [
+                "114d5c4807da0750"
+            ],
+            [
+                "25959557a9a72098"
+            ],
+            [
+                "750479f2b9e31dfb"
+            ],
+            [
+                "512a3c669be2fde5"
+            ],
+            [
+                "5161b22076cad002"
+            ]
+        ]
+    },
+    {
+        "id": "114d5c4807da0750",
+        "type": "ui_gauge",
+        "z": "3932f41790e8850a",
+        "name": "",
+        "group": "b918fe37258023a5",
+        "order": 0,
+        "width": 0,
+        "height": 0,
+        "gtype": "gage",
+        "title": "Total observations",
+        "label": "observation",
+        "format": "{{value}}",
+        "min": 0,
+        "max": "30000",
+        "colors": [
+            "#d31717",
+            "#e6e600",
+            "#1beb00"
+        ],
+        "seg1": "",
+        "seg2": "",
+        "diff": false,
+        "className": "",
+        "x": 2130,
+        "y": 460,
+        "wires": []
+    },
+    {
+        "id": "25959557a9a72098",
+        "type": "ui_gauge",
+        "z": "3932f41790e8850a",
+        "name": "",
+        "group": "b918fe37258023a5",
+        "order": 1,
+        "width": 0,
+        "height": 0,
+        "gtype": "gage",
+        "title": "Species richness",
+        "label": "",
+        "format": "{{value}}",
+        "min": 0,
+        "max": "2000",
+        "colors": [
+            "#00b500",
+            "#e6e600",
+            "#ca3838"
+        ],
+        "seg1": "",
+        "seg2": "",
+        "diff": false,
+        "className": "",
+        "x": 2150,
+        "y": 520,
+        "wires": []
+    },
+    {
+        "id": "512a3c669be2fde5",
+        "type": "ui_gauge",
+        "z": "3932f41790e8850a",
+        "name": "",
+        "group": "b918fe37258023a5",
+        "order": 2,
+        "width": 0,
+        "height": 0,
+        "gtype": "donut",
+        "title": "Shannon diversity ",
+        "label": "",
+        "format": "{{value}}",
+        "min": 0,
+        "max": "10",
+        "colors": [
+            "#ff0000",
+            "#e6e600",
+            "#00ff11"
+        ],
+        "seg1": "",
+        "seg2": "",
+        "diff": false,
+        "className": "",
+        "x": 2150,
+        "y": 620,
+        "wires": []
+    },
+    {
+        "id": "750479f2b9e31dfb",
+        "type": "ui_gauge",
+        "z": "3932f41790e8850a",
+        "name": "",
+        "group": "b918fe37258023a5",
+        "order": 3,
+        "width": 0,
+        "height": 0,
+        "gtype": "gage",
+        "title": "Simpson",
+        "label": "units",
+        "format": "{{value}}",
+        "min": 0,
+        "max": "1",
+        "colors": [
+            "#f90101",
+            "#e6e600",
+            "#1eff00"
+        ],
+        "seg1": "",
+        "seg2": "",
+        "diff": false,
+        "className": "",
+        "x": 2140,
+        "y": 580,
+        "wires": []
+    },
+    {
+        "id": "5161b22076cad002",
+        "type": "ui_text",
+        "z": "3932f41790e8850a",
+        "group": "b3e4453c18206ca8",
+        "order": 4,
+        "width": 0,
+        "height": 0,
+        "name": "",
+        "label": "Most Observed Specie",
+        "format": "{{msg.payload}}",
+        "layout": "row-spread",
+        "className": "",
+        "style": false,
+        "font": "",
+        "fontSize": 16,
+        "color": "#000000",
+        "x": 2160,
+        "y": 660,
+        "wires": []
+    },
+    {
+        "id": "79d77be7d3bf901b",
+        "type": "function",
+        "z": "3932f41790e8850a",
+        "name": "bigdata",
+        "func": "let year = flow.get(\"year\");\nlet month = flow.get(\"month\");\n\nif (!year || !month) {\n    msg.payload = \"Missing year/month for raw file\";\n    return msg;\n}\n\nyear = String(year).trim();\nmonth = String(month).trim();\n\nlet mm = month;\nif (mm.length === 1) {\n    mm = \"0\" + mm;\n}\n\nmsg.filenamebigdata = \"/Users/thomasgatse/output/biodiversity_raw_\" + year + \"-\" + mm + \".csv\";\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1140,
+        "y": 140,
+        "wires": [
+            [
+                "a4b62d9cc1f38157"
+            ]
+        ]
+    },
+    {
+        "id": "a4b62d9cc1f38157",
+        "type": "file in",
+        "z": "3932f41790e8850a",
+        "name": "read big data",
+        "filename": "filenamebigdata",
+        "filenameType": "msg",
+        "format": "utf8",
+        "chunk": false,
+        "sendError": false,
+        "encoding": "utf8",
+        "allProps": false,
+        "x": 1350,
+        "y": 120,
+        "wires": [
+            [
+                "d4645849520fb004"
+            ]
+        ]
+    },
+    {
+        "id": "d4645849520fb004",
+        "type": "csv",
+        "z": "3932f41790e8850a",
+        "name": "",
+        "spec": "",
+        "sep": ",",
+        "hdrin": true,
+        "hdrout": "none",
+        "multi": "mult",
+        "ret": "\\n",
+        "temp": "",
+        "skip": "0",
+        "strings": true,
+        "include_empty_strings": "",
+        "include_null_values": "",
+        "x": 1530,
+        "y": 120,
+        "wires": [
+            [
+                "ff4c1478e4bee9d0",
+                "93ab4bc456ce2f78"
+            ]
+        ]
+    },
+    {
+        "id": "ff4c1478e4bee9d0",
+        "type": "ui_table",
+        "z": "3932f41790e8850a",
+        "group": "7c0a404e468cb3c9",
+        "name": "",
+        "order": 0,
+        "width": "12",
+        "height": "7",
+        "columns": [],
+        "outputs": 0,
+        "cts": false,
+        "x": 1750,
+        "y": 120,
+        "wires": []
+    },
+    {
+        "id": "7fd53c467d5bc91a",
+        "type": "ui_form",
+        "z": "3932f41790e8850a",
+        "name": "",
+        "label": "run",
+        "group": "2794bd6b57677676",
+        "order": 4,
+        "width": 0,
+        "height": 0,
+        "options": [
+            {
+                "label": "Year (YYYY)",
+                "value": "year",
+                "type": "number",
+                "required": true,
+                "rows": null
+            },
+            {
+                "label": "Month (1-12)",
+                "value": "month",
+                "type": "number",
+                "required": true,
+                "rows": null
+            },
+            {
+                "label": "Day (YYYY-MM-DD)",
+                "value": "day",
+                "type": "text",
+                "required": true,
+                "rows": null
+            }
+        ],
+        "formValue": {
+            "year": "",
+            "month": "",
+            "day": ""
+        },
+        "payload": "",
+        "submit": "submit",
+        "cancel": "cancel",
+        "topic": "run",
+        "topicType": "str",
+        "splitLayout": "",
+        "className": "",
+        "x": 590,
+        "y": 400,
+        "wires": [
+            [
+                "a6f6924677265583",
+                "d68405d55e711645"
+            ]
+        ]
+    },
+    {
+        "id": "d68405d55e711645",
+        "type": "debug",
+        "z": "3932f41790e8850a",
+        "name": "debug 1",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 740,
+        "y": 540,
+        "wires": []
+    },
+    {
+        "id": "93ab4bc456ce2f78",
+        "type": "function",
+        "z": "3932f41790e8850a",
+        "name": "function 2",
+        "func": "let rows = msg.payload;\n\nif (rows === undefined || rows === null) {\n    return [\n        { payload: [] },\n        { payload: [] },\n        { payload: \"No data available\" }\n    ];\n}\n\nif (rows.length === 0) {\n    return [\n        { payload: [] },\n        { payload: [] },\n        { payload: \"No data available\" }\n    ];\n}\n\nlet speciesCount = {};\n\nfor (let i = 0; i < rows.length; i++) {\n    let row = rows[i];\n\n    let species = row.species;\n    let count = Number(row.sum);\n\n    if (species === undefined) {\n        continue;\n    }\n\n    if (isNaN(count)) {\n        continue;\n    }\n\n    if (speciesCount[species] === undefined) {\n        speciesCount[species] = 0;\n    }\n\n    speciesCount[species] = speciesCount[species] + count;\n}\n\nlet speciesArray = [];\n\nfor (let speciesName in speciesCount) {\n    let obj = {};\n    obj.species = speciesName;\n    obj.observations = speciesCount[speciesName];\n\n    speciesArray.push(obj);\n}\n\nlet sortedDesc = [];\n\nfor (let i = 0; i < speciesArray.length; i++) {\n    sortedDesc.push(speciesArray[i]);\n}\n\nfor (let i = 0; i < sortedDesc.length; i++) {\n    for (let j = i + 1; j < sortedDesc.length; j++) {\n        if (sortedDesc[j].observations > sortedDesc[i].observations) {\n            let temp = sortedDesc[i];\n            sortedDesc[i] = sortedDesc[j];\n            sortedDesc[j] = temp;\n        }\n    }\n}\n\nlet sortedAsc = [];\n\nfor (let i = 0; i < speciesArray.length; i++) {\n    sortedAsc.push(speciesArray[i]);\n}\n\nfor (let i = 0; i < sortedAsc.length; i++) {\n    for (let j = i + 1; j < sortedAsc.length; j++) {\n        if (sortedAsc[j].observations < sortedAsc[i].observations) {\n            let temp = sortedAsc[i];\n            sortedAsc[i] = sortedAsc[j];\n            sortedAsc[j] = temp;\n        }\n    }\n}\n\nlet top20 = [];\n\nfor (let i = 0; i < 20 && i < sortedDesc.length; i++) {\n    top20.push(sortedDesc[i]);\n}\n\nlet bottom20 = [];\n\nfor (let i = 0; i < 20 && i < sortedAsc.length; i++) {\n    bottom20.push(sortedAsc[i]);\n}\n\n\nlet mostObservedText = \"Most observed species is \";\n\nif (top20.length > 0) {\n    mostObservedText =\n        mostObservedText +\n        top20[0].species +\n        \" (\" +\n        top20[0].observations +\n        \" observations)\";\n} else {\n    mostObservedText = mostObservedText + \"N/A\";\n}\n\nreturn [\n    { payload: top20 },           \n    { payload: bottom20 },        \n    { payload: mostObservedText } \n];",
+        "outputs": 3,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1580,
+        "y": 220,
+        "wires": [
+            [
+                "cf162c36fa0513a1"
+            ],
+            [
+                "a18b8359c705d2db"
+            ],
+            [
+                "bca18bf757ef6c50"
+            ]
+        ]
+    },
+    {
+        "id": "cf162c36fa0513a1",
+        "type": "ui_table",
+        "z": "3932f41790e8850a",
+        "group": "7c0a404e468cb3c9",
+        "name": "TOP 20",
+        "order": 1,
+        "width": "12",
+        "height": "4",
+        "columns": [
+            {
+                "field": "species",
+                "title": "top 20 species",
+                "width": "",
+                "align": "left",
+                "formatter": "plaintext",
+                "formatterParams": {
+                    "target": "_blank"
+                }
+            }
+        ],
+        "outputs": 1,
+        "cts": true,
+        "x": 1780,
+        "y": 200,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "a18b8359c705d2db",
+        "type": "ui_table",
+        "z": "3932f41790e8850a",
+        "group": "7c0a404e468cb3c9",
+        "name": "low 20",
+        "order": 2,
+        "width": "12",
+        "height": "5",
+        "columns": [
+            {
+                "field": "species",
+                "title": "low 20 species",
+                "width": "",
+                "align": "left",
+                "formatter": "plaintext",
+                "formatterParams": {
+                    "target": "_blank"
+                }
+            },
+            {
+                "field": "observations",
+                "title": "OBS",
+                "width": "",
+                "align": "left",
+                "formatter": "plaintext",
+                "formatterParams": {
+                    "target": "_blank"
+                }
+            }
+        ],
+        "outputs": 0,
+        "cts": false,
+        "x": 1810,
+        "y": 260,
+        "wires": []
+    },
+    {
+        "id": "bca18bf757ef6c50",
+        "type": "ui_text",
+        "z": "3932f41790e8850a",
+        "group": "7c0a404e468cb3c9",
+        "order": 3,
+        "width": 0,
+        "height": 0,
+        "name": "",
+        "label": "",
+        "format": "{{msg.payload}}",
+        "layout": "row-spread",
+        "className": "",
+        "style": false,
+        "font": "",
+        "fontSize": 16,
+        "color": "#000000",
+        "x": 1690,
+        "y": 300,
+        "wires": []
+    },
+    {
+        "id": "275c602480bedfb7",
+        "type": "function",
+        "z": "3932f41790e8850a",
+        "name": "map",
+        "func": "let day = flow.get(\"day\");\n\nif (!day) {\n    msg.statusCode = 404;\n    msg.payload = \"No map generated yet. Run first.\";\n    return msg;\n}\n\nmsg.filename = \"/Users/thomasgatse/output/observations_map_\" + day + \".html\";\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1050,
+        "y": 620,
+        "wires": [
+            [
+                "baaa947e82696617"
+            ]
+        ]
+    },
+    {
+        "id": "baaa947e82696617",
+        "type": "file in",
+        "z": "3932f41790e8850a",
+        "name": "read html",
+        "filename": "filename",
+        "filenameType": "msg",
+        "format": "utf8",
+        "chunk": false,
+        "sendError": false,
+        "encoding": "none",
+        "allProps": false,
+        "x": 1120,
+        "y": 700,
+        "wires": [
+            [
+                "d65282678fa8a35c"
+            ]
+        ]
+    },
+    {
+        "id": "069eccf1854f178d",
+        "type": "http in",
+        "z": "3932f41790e8850a",
+        "name": "get map",
+        "url": "/map",
+        "method": "get",
+        "upload": false,
+        "skipBodyParsing": false,
+        "swaggerDoc": "",
+        "x": 860,
+        "y": 620,
+        "wires": [
+            [
+                "275c602480bedfb7"
+            ]
+        ]
+    },
+    {
+        "id": "d65282678fa8a35c",
+        "type": "function",
+        "z": "3932f41790e8850a",
+        "name": "headers",
+        "func": "msg.headers = {};\nmsg.headers[\"Content-Type\"] = \"text/html; charset=utf-8\";\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1240,
+        "y": 640,
+        "wires": [
+            [
+                "f9af779742578772"
+            ]
+        ]
+    },
+    {
+        "id": "bb87be0eee5fd6d6",
+        "type": "ui_template",
+        "z": "3932f41790e8850a",
+        "group": "ui_group_map",
+        "name": "Observation Map",
+        "order": 1,
+        "width": 0,
+        "height": 0,
+        "format": "<iframe ng-src=\"{{'/map?_=' + Date.now()}}\" style=\"width:100%; height:600px; border:0;\"></iframe>",
+        "storeOutMessages": true,
+        "fwdInMessages": true,
+        "resendOnRefresh": true,
+        "templateScope": "local",
+        "className": "",
+        "x": 1470,
+        "y": 680,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "f9af779742578772",
+        "type": "http response",
+        "z": "3932f41790e8850a",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 1310,
+        "y": 720,
+        "wires": []
+    },
+    {
+        "id": "b918fe37258023a5",
+        "type": "ui_group",
+        "name": "Data Summary",
+        "tab": "ui_tab_ns",
+        "order": 6,
+        "disp": true,
+        "width": "10",
+        "collapse": false,
+        "className": ""
+    },
+    {
+        "id": "b3e4453c18206ca8",
+        "type": "ui_group",
+        "name": "Data",
+        "tab": "b90684aea1b4c610",
+        "order": 2,
+        "disp": false,
+        "width": "9",
+        "collapse": false,
+        "className": ""
+    },
+    {
+        "id": "7c0a404e468cb3c9",
+        "type": "ui_group",
+        "name": "big data",
+        "tab": "ui_tab_ns",
+        "order": 4,
+        "disp": true,
+        "width": "12",
+        "collapse": false,
+        "className": ""
+    },
+    {
+        "id": "2794bd6b57677676",
+        "type": "ui_group",
+        "name": "Input",
+        "tab": "ui_tab_ns",
+        "order": 5,
+        "disp": true,
+        "width": 6,
+        "collapse": false,
+        "className": ""
+    },
+    {
+        "id": "ui_group_map",
+        "type": "ui_group",
+        "name": "Observation Map",
+        "tab": "ui_tab_ns",
+        "order": 3,
+        "disp": true,
+        "width": "12",
+        "collapse": false
+    },
+    {
+        "id": "ui_tab_ns",
+        "type": "ui_tab",
+        "name": "NatuurSpotter",
+        "icon": "dashboard",
+        "disabled": false,
+        "hidden": false
+    },
+    {
+        "id": "b90684aea1b4c610",
+        "type": "ui_tab",
+        "name": "Home",
+        "icon": "dashboard",
+        "disabled": false,
+        "hidden": false
+    },
+    {
+        "id": "f2d8b86bfd5e2686",
+        "type": "global-config",
+        "env": [],
+        "modules": {
+            "node-red-dashboard": "3.6.6",
+            "node-red-node-ui-table": "0.4.5"
+        }
+    }
+]
