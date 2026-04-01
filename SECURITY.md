@@ -6,7 +6,7 @@ The latest version on the default branch is the supported version.
 
 ## Reporting a Vulnerability
 
-If you discover a security issue, report it privately to `thomasgatse@outlook.be`.
+If you discover a security issue, report it privately to `thomasgatse@outlook.com`.
 Please include:
 
 - A clear description of the issue
