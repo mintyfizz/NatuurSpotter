@@ -13,7 +13,7 @@ It pulls public data from **waarnemingen.be** and can generate CSV summaries, in
 
 ## Requirements
 
-- Python 3.8 or newer
+- Python 3.9 or newer
 - Internet access (for waarnemingen.be, Wikimedia, Wikipedia, Geoapify, and optionally Together)
 
 ## Installation
