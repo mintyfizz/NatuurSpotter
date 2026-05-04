@@ -28,6 +28,17 @@ load_dotenv()
 
 
 def _required_env_var(name):
+    """Return a required environment variable or raise a clear configuration error.
+
+    Args:
+        name: Environment variable name to read.
+
+    Returns:
+        The configured environment variable value.
+
+    Raises:
+        RuntimeError: If the environment variable is unset or empty.
+    """
     value = os.getenv(name)
     if not value:
         raise RuntimeError(f"Missing required environment variable: {name}")
@@ -35,6 +46,22 @@ def _required_env_var(name):
 
 
 def _http_get(url, **kwargs):
+    """Send an HTTP GET request using NatuurSpotter defaults.
+
+    The helper centralizes the package User-Agent, request timeout, and HTTP
+    status handling for all external providers.
+
+    Args:
+        url: Absolute URL to request.
+        **kwargs: Additional keyword arguments forwarded to ``requests.get``.
+
+    Returns:
+        A successful ``requests.Response`` object.
+
+    Raises:
+        requests.HTTPError: If the server returns a 4xx or 5xx response.
+        requests.RequestException: If the request fails before a response is received.
+    """
     headers = DEFAULT_HEADERS.copy()
     headers.update(kwargs.pop("headers", {}) or {})
     kwargs.setdefault("timeout", REQUEST_TIMEOUT)
@@ -44,6 +71,19 @@ def _http_get(url, **kwargs):
 
 
 def _translate_text(text, src, dest):
+    """Translate text with googletrans on a best-effort basis.
+
+    Translation is optional for package import and runtime stability. If
+    googletrans is unavailable or fails, the original text is returned.
+
+    Args:
+        text: Text to translate.
+        src: Source language code accepted by googletrans.
+        dest: Destination language code accepted by googletrans.
+
+    Returns:
+        Translated text, or the original text when translation is unavailable.
+    """
     try:
         from googletrans import Translator
     except Exception:
@@ -56,6 +96,20 @@ def _translate_text(text, src, dest):
 
 
 def _pdf_image_bytes(image_url, image_bytes):
+    """Prepare downloaded image bytes for embedding in a PDF report.
+
+    JPEG and PNG files are passed through with an appropriate suffix. Other
+    Pillow-readable formats are converted to PNG. Unsupported formats, such as
+    SVG, are skipped.
+
+    Args:
+        image_url: Source image URL used for diagnostic messages.
+        image_bytes: Raw downloaded image bytes.
+
+    Returns:
+        A ``(suffix, bytes)`` tuple suitable for a temporary PDF image file, or
+        ``(None, None)`` when the image cannot be embedded.
+    """
     if not image_bytes:
         return None, None
 
@@ -83,14 +137,39 @@ def _pdf_image_bytes(image_url, image_bytes):
 
 
 def _looks_like_scientific_name(name):
+    """Check whether a species query appears to be a Latin scientific name.
+
+    Args:
+        name: Species search term supplied by the caller.
+
+    Returns:
+        True when the value resembles a binomial or trinomial Latin name.
+    """
     return bool(re.match(r"^[A-Z][a-z]+(?:\s+[a-z][a-z-]+){1,2}$", name.strip()))
 
 
 def _species_search_query(name):
+    """Normalize a species name for a Waarnemingen search URL.
+
+    Args:
+        name: Scientific or common species name.
+
+    Returns:
+        URL-encoded query text with hyphens treated as word separators.
+    """
     return quote_plus(name.strip().replace("-", " "))
 
 
 def _species_link_from_href(href):
+    """Build an absolute Waarnemingen species URL from a relative href.
+
+    Args:
+        href: Relative href extracted from Waarnemingen search results.
+
+    Returns:
+        Full species page URL ending with ``/``, or an empty string for invalid
+        hrefs.
+    """
     if href is None or not href.startswith("/species/"):
         return ""
 
@@ -101,6 +180,17 @@ def _species_link_from_href(href):
 
 
 def _species_href_from_search_query(query):
+    """Search Waarnemingen and return the first species result href.
+
+    Args:
+        query: Scientific or common species name to search for.
+
+    Returns:
+        Relative species href, or an empty string when no species result exists.
+
+    Raises:
+        requests.RequestException: If the Waarnemingen request fails.
+    """
     search_url = f"https://waarnemingen.be/search/?q={_species_search_query(query)}"
     r = _http_get(search_url)
     soup = BeautifulSoup(r.text, "html.parser")
@@ -115,12 +205,18 @@ def _species_href_from_search_query(query):
 
 
 def getinfo(latinName):
-    """
-    Fetches the first paragraph of the Wikipedia page for the given Latin name.
-    input: 
-        - latinName (str) - The Latin name of the species.
-    output: 
-        - The first paragraph of the Wikipedia page.
+    """Fetch a short English species description from Dutch Wikipedia.
+
+    The lookup uses Dutch Wikipedia because many locally observed moth species
+    have better Dutch-language coverage. The first non-empty paragraph is
+    translated to English when translation is available.
+
+    Args:
+        latinName: Latin scientific name to look up.
+
+    Returns:
+        First translated paragraph with trailing blank line, or an empty string
+        when the page cannot be found or read.
     """
     
     wikipedia.set_lang("nl")
@@ -156,14 +252,24 @@ def getinfo(latinName):
 
 
 def getRarity(latinName, limit=10):
-    """
-    Fetches rarity status and recent observations of a species from waarnemingen.be.
-    input: 
-        - latinName (str) - The Latin name of the species.
-        - limit (int) - The maximum number of observations to return.
-    output: 
-        - (commonName (str), scientificName (str), rarityStatus (str), data (DataFrame)) - The common name, scientific name, rarity status, and recent observations as a DataFrame.
-        - None if the species or rarity page cannot be found.
+    """Fetch rarity metadata and recent West Flanders observations.
+
+    The species is resolved through Waarnemingen search, then the species page
+    is parsed for common name, scientific name, rarity status, and the recent
+    observation table.
+
+    Args:
+        latinName: Scientific or common species name accepted by Waarnemingen.
+        limit: Maximum number of observation rows to include.
+
+    Returns:
+        Tuple ``(common_name, scientific_name, rarity_status, observations)`` on
+        success. ``observations`` is a DataFrame with ``date``, ``number``, and
+        ``location`` columns. Returns ``None`` when the species or rarity status
+        cannot be resolved.
+
+    Raises:
+        requests.RequestException: If a Waarnemingen request fails.
     """
     rarityUrl = getspecies_name(latinName)
     if not rarityUrl:
@@ -253,12 +359,18 @@ def getRarity(latinName, limit=10):
 
 def get_image(species_name):
     
-    """
-    Fetches the first image from Wikimedia Commons related to the species name.
-    input: 
-        - species_name - The name of the species.
-    output: 
-        -(imageUrl, imageBytes) - The URL of the image and the image bytes.
+    """Fetch the first Wikimedia Commons image for a species.
+
+    Args:
+        species_name: Scientific or common species name to search for in
+            Wikimedia Commons.
+
+    Returns:
+        Tuple ``(image_url, image_bytes)`` when an image is found, otherwise
+        ``(None, None)``.
+
+    Raises:
+        requests.RequestException: If the Wikimedia API or image download fails.
     """
     params = {
         "action": "query",
@@ -316,14 +428,22 @@ def get_image(species_name):
 
 
 def species_info(latinName):
-    """
-    Fetches species information and writes a PDF report.
-    
-    input: 
-        -latinName (str) - The Latin name of the species.
-    output: 
-        -Generates a PDF file with species information.
-    
+    """Generate a PDF species report in the current working directory.
+
+    The report combines a Wikipedia description, Wikimedia image, Waarnemingen
+    rarity status, and recent West Flanders observations. Files are written to
+    ``./output/<species_name>.pdf``.
+
+    Args:
+        latinName: Scientific or common species name to report on.
+
+    Returns:
+        None. The function writes a PDF file as a side effect and prints a
+        message when Waarnemingen data cannot be resolved.
+
+    Raises:
+        requests.RequestException: If an upstream HTTP request fails.
+        RuntimeError: If required PDF font resources cannot be loaded.
     """
 
     
@@ -428,12 +548,22 @@ def species_info(latinName):
     pdf.output(filepath)
 
 def Sdata(day=None):
-    """
-    Scrapes one page of the daylist table.
-    input:
-        day= None 
-    output:
-        rows with sum// or w/o sum
+    """Scrape daily moth observation rows for West Flanders.
+
+    The day list is collected from Waarnemingen for moth species group 8 and
+    West Flanders country division 15. Duplicate rows and repeated pagination
+    pages are removed.
+
+    Args:
+        day: Date string in ``YYYY-MM-DD`` or ``DD-MM-YYYY`` format. Defaults to
+            today's date when omitted.
+
+    Returns:
+        List of dictionaries with ``date``, ``species``, ``location``, and
+        ``sum`` keys. Returns an empty list for invalid dates or no data.
+
+    Raises:
+        requests.RequestException: If the Waarnemingen request fails.
     """
     if day is None:
         day = date.today().strftime("%Y-%m-%d")
@@ -536,6 +666,19 @@ def Sdata(day=None):
 
 
 def geopoints(location):
+    """Geocode a West Flanders place name with Geoapify.
+
+    Args:
+        location: Place or municipality text extracted from Waarnemingen.
+
+    Returns:
+        Tuple ``(latitude, longitude)`` for the best matching Belgian city
+        result, or ``(None, None)`` when Geoapify returns no result.
+
+    Raises:
+        RuntimeError: If ``GEOAPIFY_API_KEY`` is not configured.
+        requests.RequestException: If the Geoapify request fails.
+    """
     url = "https://api.geoapify.com/v1/geocode/search"
     api_key = _required_env_var("GEOAPIFY_API_KEY")
     params = {
@@ -563,27 +706,37 @@ def geopoints(location):
 
 def wV(lat, lng):
     
-    """
-    Checks whether a geographic point is located inside West Flanders
-    This helps filter bad location addresses 
-    input:
-        - lat: latitude of the point
-        - lng: longitude of the point
-    output : 
-        - True if the point lies within west flanders, False otherwise
+    """Check whether coordinates fall inside the West Flanders bounding box.
+
+    This is a coarse validation step used to discard obviously bad geocoding
+    results before map rendering.
+
+    Args:
+        lat: Latitude in decimal degrees.
+        lng: Longitude in decimal degrees.
+
+    Returns:
+        True when the point is within the configured West Flanders bounds.
     """
     return (50.7 <= lat <= 51.4) and (2.5 <= lng <= 3.5)
 
 def rowstopoints(rows, geocode_delay=0.1):
-    """
-    Converts locations to points.
-    Input: 
-        - rows = list of dicts from Sdata()
-           each row has: {"date": "...", "species": "...", "location": "..."}
-        - geocode_delay = pause in seconds after each geocoding request.
-    Output: 
-        - points: list of dicts, ONE dict per location point:
-           {"date": "...", "species": "...", "location": "...", "lat": ..., "lng": ...}
+    """Convert scraped observation locations into map-ready coordinates.
+
+    Rows with aggregate location text are skipped. Multiple comma-separated
+    locations in one row are geocoded independently.
+
+    Args:
+        rows: Observation dictionaries returned by ``Sdata``.
+        geocode_delay: Seconds to sleep after each Geoapify geocoding request.
+
+    Returns:
+        List of dictionaries with ``date``, ``species``, ``location``, ``lat``,
+        and ``lng`` keys.
+
+    Raises:
+        RuntimeError: If ``GEOAPIFY_API_KEY`` is not configured.
+        requests.RequestException: If a Geoapify request fails.
     """
     points = []
 
@@ -633,13 +786,17 @@ def rowstopoints(rows, geocode_delay=0.1):
 
 
 def speciescolor(species, species_colors):
-    """
-    Assigns and remembers one color per species for the observation map
-    input:
-        species:The species name for the observation
-        species_colors: A dictionary that stores already assigned colors in the form: {species_name: color}
-    output:
-        color : A color string that is always the same for the same species.
+    """Return a stable legend color for a species.
+
+    The mapping is stored in the caller-provided dictionary so repeated species
+    names keep the same color within one map.
+
+    Args:
+        species: Species name from an observation row.
+        species_colors: Mutable mapping of species names to assigned hex colors.
+
+    Returns:
+        Six-digit CSS hex color assigned to the species.
     """
 
     palette = ["#e41a1c", "#b2182b", "#cb181d", "#fb6a4a", "#fcae91", "#377eb8", "#08519c", "#2171b5", "#4292c6", "#6baed6", "#9ecae1",
@@ -661,21 +818,24 @@ def speciescolor(species, species_colors):
     return color
 
 def observations_map(day=None, open_browser=False, geocode_delay=0.1):
-    """
-    Generates an interactive observation map for moth observations in West Flanders
-    input:
-        day (str or None)
-            Date in format YYYY-MM-DD.
-            If None, the current date is used.
-        open_browser (bool)
-            Open the generated map in the default browser when True.
-        geocode_delay (float)
-            Pause in seconds after each geocoding request.
+    """Generate an interactive HTML map for daily moth observations.
 
-    output:
-        str or None
-            Saves an HTML map file to the output directory and returns its path.
-            Returns None when no data is available.
+    Observation rows are scraped from Waarnemingen, geocoded with Geoapify, and
+    rendered with Folium. Species names are HTML-escaped before they are written
+    to map popups and the legend.
+
+    Args:
+        day: Date string in ``YYYY-MM-DD`` format. Defaults to today's date.
+        open_browser: Open the generated HTML file in the default browser.
+        geocode_delay: Seconds to sleep after each Geoapify geocoding request.
+
+    Returns:
+        Path to the generated HTML file, or ``None`` when no observation data is
+        available.
+
+    Raises:
+        RuntimeError: If ``GEOAPIFY_API_KEY`` is required but missing.
+        requests.RequestException: If Waarnemingen or Geoapify requests fail.
     """
     if day is None:
         day = date.today().strftime("%Y-%m-%d")
@@ -763,15 +923,20 @@ def observations_map(day=None, open_browser=False, geocode_delay=0.1):
     return filepath
 
 def getspecies_name(latinName):  # reused code piiece from getRarity
-    """
-    Searches waarnemingen.be for a species and returns the species page link
+    """Resolve a species name to its Waarnemingen species page URL.
 
-    input:
-        latinName --> scientific or common name of the species.
+    Scientific names are searched as-is. Common English names fall back to a
+    best-effort Dutch translation when the original query has no result.
 
-    output:
-        speciesNameLink --> full URL to the species page on waarnemingen.be.
-    Returns an empty string if the species is not found.
+    Args:
+        latinName: Scientific or common species name to resolve.
+
+    Returns:
+        Absolute Waarnemingen species URL ending with ``/``, or an empty string
+        when no species result can be found.
+
+    Raises:
+        requests.RequestException: If Waarnemingen search fails.
     """
 
     href = _species_href_from_search_query(latinName)
@@ -792,14 +957,13 @@ def getspecies_name(latinName):  # reused code piiece from getRarity
 
 
 def getmonthtoseasonn(month): #classifyingg 
-    """
-    Converts a numeric month to a meteorological season.
+    """Map a month number to a meteorological season.
 
-    input: 
-        month --> Month number (1-12)
+    Args:
+        month: Month number from 1 through 12.
 
-    output:
-        season --> "Winter", "Spring", "Summer", "Autumn"
+    Returns:
+        One of ``"Winter"``, ``"Spring"``, ``"Summer"``, or ``"Autumn"``.
     """
     if month in (12, 1, 2):
         return "Winter"
@@ -813,17 +977,16 @@ def getmonthtoseasonn(month): #classifyingg
 
 
 def observationtble(table):
-    """
-    Extracts observation data from the observations HTML table
+    """Parse a Waarnemingen species observation table.
 
-    input:
-        table--> observation rows.
+    The function extracts observation dates and counts, then derives the
+    meteorological season from each date.
 
-    output:
-        rows --> A list of dictionaries where each dictionary represents one day:
-                - "date"  : observation date (YYYY-MM-DD)
-                - "count": number of observations on that date
-                - "season" : season derived from the month (Winter, Spring, Summer, Autumn)
+    Args:
+        table: BeautifulSoup table element from a species observations page.
+
+    Returns:
+        List of dictionaries with ``date``, ``count``, and ``season`` keys.
     """
     rows = []
 
@@ -861,20 +1024,23 @@ def observationtble(table):
 
 
 def season(year, species_id, request_delay=0.2):
-    """
-    Scrapes and processes observation data for a specific species
-    in West Flanders for a given year
+    """Collect annual seasonal observation data for one species.
 
-    input:
-        year --> Year for which observations are collected.
-        species_id ---> Species ID extracted from the waarnemingen.be species page.
-        request_delay --> pause in seconds between paginated requests.
-    output: data -->  dataframe containing:
-            - date (datetime)
-            - count (number of observations)
-            - season (Winter, Spring, Summer, Autumn)
-    if empty:
-            Returns an empty DataFrame with the expected columns.
+    Pages are fetched from Waarnemingen until no table is found, no rows are
+    parsed, or a repeated page is detected.
+
+    Args:
+        year: Calendar year to collect.
+        species_id: Waarnemingen species identifier from a species page URL.
+        request_delay: Seconds to sleep between paginated Waarnemingen requests.
+
+    Returns:
+        DataFrame with ``date``, ``count``, and ``season`` columns. ``date`` is
+        converted to pandas datetime. Returns an empty DataFrame with the same
+        columns when no observations are found.
+
+    Raises:
+        requests.RequestException: If a Waarnemingen request fails.
     """
 
     allrows = []
@@ -925,17 +1091,22 @@ def season(year, species_id, request_delay=0.2):
     return data
 
 def seasonal_analysis(species, year):
-    """
-    Analyzes seasonal observation patterns for a given moth species
-    in West Flanders for a specific year
+    """Plot seasonal observation totals and optionally print an LLM explanation.
 
-    input:
-        species --> Name of the moth species 
-        year --> year for which the observations are analyzed
+    The function resolves the species through Waarnemingen, scrapes annual
+    observations for West Flanders, displays a Matplotlib bar chart, and uses
+    Together when ``TOGETHER_API_KEY`` is configured.
 
-    output:
-            - seasonal bar chart and prints
-            - a short ecological explanation in the console
+    Args:
+        species: Scientific or common species name to analyze.
+        year: Calendar year to analyze.
+
+    Returns:
+        None. The function displays a chart and may print an ecological summary
+        as side effects.
+
+    Raises:
+        requests.RequestException: If Waarnemingen requests fail.
     """
     
     species_url = getspecies_name(species)
@@ -1002,15 +1173,26 @@ def seasonal_analysis(species, year):
     print(explanation)
 
 def biodiversity_analysis(month=None, year=None, request_delay=0.2):
-    """
-    Analyzes biodiversity data for a given month in a given year (West Flanders)
-    input:
-        - month --> integer 
-        - year --> integer
-        - request_delay --> pause in seconds between daily requests
-    output:
-        - return CSV summary_df
-        - return CSV raw_df 
+    """Generate monthly biodiversity metrics for West Flanders moth observations.
+
+    The analysis scrapes daily Waarnemingen day-list data for a full month,
+    writes summary and raw CSV files to ``./output``, and returns both DataFrames
+    for programmatic use.
+
+    Args:
+        month: Month number from 1 through 12. Defaults to the current month.
+        year: Calendar year. Defaults to the current year.
+        request_delay: Seconds to sleep between daily Waarnemingen requests.
+
+    Returns:
+        Tuple ``(summary_df, raw_df)``. ``summary_df`` contains monthly totals,
+        richness, frequency, top species share, Shannon diversity, and Simpson
+        diversity. ``raw_df`` contains the scraped observation rows.
+
+    Raises:
+        ValueError: If ``month`` or ``year`` cannot be converted to integers, or
+            if ``month`` is outside the valid calendar range.
+        requests.RequestException: If a Waarnemingen request fails.
     """
 
     today = date.today()
