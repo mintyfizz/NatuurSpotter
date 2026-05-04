@@ -21,7 +21,7 @@ from fpdf import FPDF
 
 
 REQUEST_TIMEOUT = 20
-USER_AGENT = "NatuurSpotter/1.0.1"
+USER_AGENT = "NatuurSpotter/0.1.0"
 DEFAULT_HEADERS = {"User-Agent": USER_AGENT}
 
 load_dotenv()
