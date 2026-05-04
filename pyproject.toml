@@ -7,7 +7,7 @@ name = "natuurspotter"
 version = "1.0.1"
 description = "Biodiversity and moth observation analysis for West Flanders"
 readme = "README.md"
-requires-python = ">=3.8,<3.13"
+requires-python = ">=3.8"
 license = { text = "MIT" }
 authors = [{ name = "Thomas Gatse", email = "thomasgatse@outlook.be" }]
 keywords = ["biodiversity", "moths", "ecology", "belgium", "data-analysis", "mapping"]
@@ -23,6 +23,7 @@ classifiers = [
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "Topic :: Scientific/Engineering :: Information Analysis",
 ]
 
@@ -31,14 +32,17 @@ dependencies = [
   "requests",
   "beautifulsoup4",
   "pandas>=2.0",
-  "googletrans==4.0.0rc1",
+  "googletrans>=4.0.2,<5",
   "fpdf2",
   "folium",
   "matplotlib>=3.8",
-  "together",
   "pillow",
   "python-dotenv"
 ]
+
+[project.optional-dependencies]
+llm = ["together>=2.0"]
+dev = ["pytest>=8.0", "ruff>=0.8"]
 
 [tool.setuptools]
 package-dir = { "" = "src" }
@@ -49,3 +53,14 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 natuurspotter = ["fonts/*.ttf", "fonts/*.txt"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py38"
+
+[tool.ruff.lint]
+select = ["E9", "F63", "F7", "F82"]

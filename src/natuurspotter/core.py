@@ -1,27 +1,28 @@
-
-import wikipedia
-import requests
-from bs4 import BeautifulSoup
-import re
-from datetime import date
-import pandas as pd
-from googletrans import Translator
-from dotenv import load_dotenv
-import os
-import tempfile
-from fpdf import FPDF
-import folium
-import webbrowser
-import matplotlib.pyplot as plt
-
-# Hides Together SDK import banner in normal usage.
-os.environ.setdefault("TOGETHER_NO_BANNER", "1")
-from together import Together
-import math
 import calendar
+import html
+import math
+import os
+import re
+import tempfile
+import time
+import webbrowser
+from datetime import date
+from io import BytesIO
+from urllib.parse import quote_plus, urlparse
+
+import folium
+import matplotlib.pyplot as plt
+import pandas as pd
+import requests
+import wikipedia
+from bs4 import BeautifulSoup
+from dotenv import load_dotenv
+from fpdf import FPDF
 
 
 REQUEST_TIMEOUT = 20
+USER_AGENT = "NatuurSpotter/1.0.1"
+DEFAULT_HEADERS = {"User-Agent": USER_AGENT}
 
 load_dotenv()
 
@@ -31,6 +32,84 @@ def _required_env_var(name):
     if not value:
         raise RuntimeError(f"Missing required environment variable: {name}")
     return value
+
+
+def _http_get(url, **kwargs):
+    headers = DEFAULT_HEADERS.copy()
+    headers.update(kwargs.pop("headers", {}) or {})
+    kwargs.setdefault("timeout", REQUEST_TIMEOUT)
+    response = requests.get(url, headers=headers, **kwargs)
+    response.raise_for_status()
+    return response
+
+
+def _translate_text(text, src, dest):
+    try:
+        from googletrans import Translator
+    except Exception:
+        return text
+
+    try:
+        return Translator().translate(text, src=src, dest=dest).text
+    except Exception:
+        return text
+
+
+def _pdf_image_bytes(image_url, image_bytes):
+    if not image_bytes:
+        return None, None
+
+    try:
+        from PIL import Image, UnidentifiedImageError
+    except Exception:
+        return None, None
+
+    try:
+        with Image.open(BytesIO(image_bytes)) as image:
+            image_format = (image.format or "").upper()
+
+            if image_format in {"JPEG", "PNG"}:
+                suffix = ".jpg" if image_format == "JPEG" else f".{image_format.lower()}"
+                return suffix, image_bytes
+
+            converted = BytesIO()
+            if image.mode not in {"RGB", "RGBA"}:
+                image = image.convert("RGB")
+            image.save(converted, format="PNG")
+            return ".png", converted.getvalue()
+    except (UnidentifiedImageError, OSError, ValueError):
+        print(f"Skipping unsupported image format: {image_url}")
+        return None, None
+
+
+def _looks_like_scientific_name(name):
+    return bool(re.match(r"^[A-Z][a-z]+(?:\s+[a-z][a-z-]+){1,2}$", name.strip()))
+
+
+def _species_search_query(name):
+    return quote_plus(name.strip().replace("-", " "))
+
+
+def _species_link_from_href(href):
+    if href is None or not href.startswith("/species/"):
+        return ""
+
+    if not href.endswith("/"):
+        href += "/"
+
+    return f"https://waarnemingen.be{href}"
+
+
+def _species_href_from_search_query(query):
+    search_url = f"https://waarnemingen.be/search/?q={_species_search_query(query)}"
+    r = _http_get(search_url)
+    soup = BeautifulSoup(r.text, "html.parser")
+
+    a = soup.select_one("li.lead a[href^='/species/']")
+    if a is None:
+        return ""
+
+    return a.get("href", "")
 
 
 
@@ -45,7 +124,12 @@ def getinfo(latinName):
     """
     
     wikipedia.set_lang("nl")
-    page = wikipedia.page(latinName)
+    try:
+        page = wikipedia.page(latinName)
+    except wikipedia.exceptions.WikipediaException:
+        return ""
+    except Exception:
+        return ""
     
     
     #text = page.content.lower() chechk this ltr
@@ -62,17 +146,13 @@ def getinfo(latinName):
     
     output = cparagraphs[0] + "\n\n"
     
-    translator = Translator()
-    output = translator.translate(output, src="nl", dest="en").text
+    output = _translate_text(output, src="nl", dest="en")
 
     return output  # return first two paragraphs as a string
 
 
 
 
-
-
-# %%
 
 
 def getRarity(latinName, limit=10):
@@ -83,58 +163,26 @@ def getRarity(latinName, limit=10):
         - limit (int) - The maximum number of observations to return.
     output: 
         - (commonName (str), scientificName (str), rarityStatus (str), data (DataFrame)) - The common name, scientific name, rarity status, and recent observations as a DataFrame.
+        - None if the species or rarity page cannot be found.
     """
-    
-    
-    translator = Translator()
-    latinName = translator.translate(latinName, src="en", dest="nl").text
-    latinName = latinName.replace(" ", "+").strip()
-    latinName = latinName.replace("-", "+").strip()
-    
-    
-    
-    headers = {"User-Agent": "TG"}
-    search_url = f"https://waarnemingen.be/search/?q={latinName}"
-    r = requests.get(search_url, headers=headers, timeout=REQUEST_TIMEOUT)
-    soup = BeautifulSoup(r.text, "html.parser")
+    rarityUrl = getspecies_name(latinName)
+    if not rarityUrl:
+        return None
 
-
-    a = soup.select_one("li.lead a[href^='/species/']")
-    if a is None:
-        return ""
-
-    href = a["href"]
-
+    href = urlparse(rarityUrl).path
     if not href.endswith("/"):
         href += "/"
 
-    rarityUrl = f"https://waarnemingen.be{href}"
-
-    '''
-
-    href = a.get("href")
-    if href is None or not href.startswith("/species/"):
-        return ""
-
-    if not href.endswith("/"):
-        href = href + "/"
-
-    rarityUrl = f"https://waarnemingen.be{href.lower()}" #going on the speicies page
-    
-    '''
-    r = requests.get(rarityUrl, headers=headers, timeout=REQUEST_TIMEOUT)
+    r = _http_get(rarityUrl)
     
     soup = BeautifulSoup(r.text, "html.parser")
 
     rarityStatus = soup.select_one("div > span.hidden-sm") #finding the rarity status
     if rarityStatus is None:
-        return ""
+        return None
     else:
        rarityStatus = rarityStatus.text.strip()
        
-    r = requests.get(rarityUrl, headers=headers, timeout=REQUEST_TIMEOUT)
-    soup = BeautifulSoup(r.text, "html.parser")
-
     tag = soup.select_one("i.species-scientific-name") #scientific name
     if tag is None:
         scientific = ""
@@ -158,17 +206,19 @@ def getRarity(latinName, limit=10):
         f"&country_division=15"
         f"&search=&user=&location=&sex=&month=&life_stage=&activity=&method="
     )
-    r = requests.get(obvsUrl, headers=headers, timeout=REQUEST_TIMEOUT)
+    r = _http_get(obvsUrl)
     
     soup = BeautifulSoup(r.text, "html.parser")
 
     table = soup.find("table", class_="table") # scrapping wannrmingen
     if table is None:
-        return  []
+        empty = pd.DataFrame(columns=["date", "number", "location"])
+        return cname, scientific, rarityStatus, empty
 
     tbody = table.find("tbody")
     if tbody is None:
-        return  []
+        empty = pd.DataFrame(columns=["date", "number", "location"])
+        return cname, scientific, rarityStatus, empty
 
     results = []
     for tr in tbody.find_all("tr"):
@@ -193,15 +243,13 @@ def getRarity(latinName, limit=10):
         if len(results) == limit:
             break
     
-    data = pd.DataFrame(results)
+    data = pd.DataFrame(results, columns=["date", "number", "location"])
     
 
     return cname, scientific, rarityStatus, data
 
 
 
-
-# %%
 
 def get_image(species_name):
     
@@ -212,9 +260,6 @@ def get_image(species_name):
     output: 
         -(imageUrl, imageBytes) - The URL of the image and the image bytes.
     """
-    
-    headers = {"User-Agent": "tg"}
-
     params = {
         "action": "query",
         "format": "json",
@@ -226,11 +271,9 @@ def get_image(species_name):
         "iiprop": "url" # returns url
     }
 
-    r = requests.get(
+    r = _http_get(
         "https://commons.wikimedia.org/w/api.php",
         params=params,
-        headers=headers,
-        timeout=REQUEST_TIMEOUT
     )
 
     data = r.json()
@@ -263,7 +306,7 @@ def get_image(species_name):
     if imageUrl is None:
         return None, None
 
-    img_response = requests.get(imageUrl, headers=headers, timeout=REQUEST_TIMEOUT)
+    img_response = _http_get(imageUrl)
     
     
     imageBytes = img_response.content # imgae bytes i will convert it on the pdf
@@ -272,13 +315,9 @@ def get_image(species_name):
 
 
 
-# %%
-
-
 def species_info(latinName):
     """
-    Fetches and displays information about the moth species on a pdf
-    getting the picture, rarity, description and table
+    Fetches species information and writes a PDF report.
     
     input: 
         -latinName (str) - The Latin name of the species.
@@ -293,14 +332,9 @@ def species_info(latinName):
     font_regular = os.path.join(font_dir, "DejaVuSans.ttf")
     font_bold = os.path.join(font_dir, "DejaVuSans-Bold.ttf") # this willl get the cwd and the fonts
 
-    
     description = getinfo(latinName)
-    if isinstance(description, str) and "not moth related" in description.lower():
-        print(f"{latinName} is not part of the moth group.")
-        return
 
-    
-    _, image_bytes = get_image(latinName)
+    image_url, image_bytes = get_image(latinName)
 
     
     result = getRarity(latinName) 
@@ -324,16 +358,22 @@ def species_info(latinName):
     pdf.cell(0, 10, common_name or latinName, new_x="LMARGIN", new_y="NEXT") # title
     pdf.ln(2)
 
-    
-    temp_image_path = None
-    if image_bytes: # transforming my image byttess through temp file to pdf image
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
-        tmp.write(image_bytes)
-        tmp.close()
-        temp_image_path = tmp.name
+    image_suffix, pdf_image_bytes = _pdf_image_bytes(image_url, image_bytes)
+    if pdf_image_bytes: # transforming my image byttess through temp file to pdf image
+        temp_image_path = None
+        try:
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=image_suffix)
+            temp_image_path = tmp.name
+            try:
+                tmp.write(pdf_image_bytes)
+            finally:
+                tmp.close()
 
-        pdf.image(temp_image_path, w=60)
-        pdf.ln(5)
+            pdf.image(temp_image_path, w=60)
+            pdf.ln(5)
+        finally:
+            if temp_image_path and os.path.exists(temp_image_path):
+                os.remove(temp_image_path)
 
     
     pdf.set_font("DejaVu", "B", size=12) 
@@ -387,10 +427,6 @@ def species_info(latinName):
 
     pdf.output(filepath)
 
-    if temp_image_path and os.path.exists(temp_image_path):
-        os.remove(temp_image_path)
-
-# %%
 def Sdata(day=None):
     """
     Scrapes one page of the daylist table.
@@ -399,7 +435,6 @@ def Sdata(day=None):
     output:
         rows with sum// or w/o sum
     """
-    parts = ""
     if day is None:
         day = date.today().strftime("%Y-%m-%d")
 
@@ -419,7 +454,6 @@ def Sdata(day=None):
     pagenum = 1
     
     url = "https://waarnemingen.be/fieldwork/observations/daylist/"
-    headers = {"User-Agent": "TG"}
 
     rows = []
     lastp = None  # remembers the previous page content
@@ -434,7 +468,7 @@ def Sdata(day=None):
             "page": pagenum
         }
 
-        r = requests.get(url, params=params, headers=headers, timeout=REQUEST_TIMEOUT)
+        r = _http_get(url, params=params)
         
         
 
@@ -501,8 +535,6 @@ def Sdata(day=None):
 
 
 
-# %%
-
 def geopoints(location):
     url = "https://api.geoapify.com/v1/geocode/search"
     api_key = _required_env_var("GEOAPIFY_API_KEY")
@@ -516,7 +548,7 @@ def geopoints(location):
         "apiKey": api_key
     }
 
-    r = requests.get(url, params=params, timeout=REQUEST_TIMEOUT)
+    r = _http_get(url, params=params)
 
     data = r.json()
     results = data.get("results", [])
@@ -529,7 +561,6 @@ def geopoints(location):
     lng = first.get("lon")
     return lat, lng
 
-# %%
 def wV(lat, lng):
     
     """
@@ -539,17 +570,17 @@ def wV(lat, lng):
         - lat: latitude of the point
         - lng: longitude of the point
     output : 
-        - "true" if the point lies within west flanders, False otherwise
+        - True if the point lies within west flanders, False otherwise
     """
     return (50.7 <= lat <= 51.4) and (2.5 <= lng <= 3.5)
 
-# %%
-def rowstopoints(rows):
+def rowstopoints(rows, geocode_delay=0.1):
     """
     Converts locations to points.
     Input: 
         - rows = list of dicts from Sdata()
            each row has: {"date": "...", "species": "...", "location": "..."}
+        - geocode_delay = pause in seconds after each geocoding request.
     Output: 
         - points: list of dicts, ONE dict per location point:
            {"date": "...", "species": "...", "location": "...", "lat": ..., "lng": ...}
@@ -570,13 +601,19 @@ def rowstopoints(rows):
 
         for part in parts:
             
-            loc = part.replace("(","").replace(")","") # removing the brackets
-            loc = re.sub(r"\b[A-Z]{2,6}\b", "", loc)
+            loc = part.strip()
+            loc = re.sub(
+                r"\s*\((?:WV|OV|AN|VB|LB|WB|HT|LG|LX|NA|BR)\)\s*$",
+                "",
+                loc,
+            ).strip("() ")
         
             if loc == "":
                 continue
 
             lat, lng = geopoints(loc)#  logitude and latitude
+            if geocode_delay:
+                time.sleep(geocode_delay)
             
             if lat is None or lng is None: 
                 continue
@@ -595,8 +632,6 @@ def rowstopoints(rows):
     return points
 
 
-# %%
-
 def speciescolor(species, species_colors):
     """
     Assigns and remembers one color per species for the observation map
@@ -614,7 +649,7 @@ def speciescolor(species, species_colors):
     "#525252", "#737373", "#969696", "#bdbdbd", "#d9d9d9", "#1b9e77", "#66c2a5", "#99d8c9", "#d95f02", "#fc8d62",
     "#7570b3", "#8da0cb", "#e7298a", "#f768a1", "#66a61e", "#a6d854", "#e6ab02", "#ffd92f", "#a6761d", "#d8b365",
     "#666666", "#999999", "#4c4cfb", "#00cc99", "#ff6699", "#9933ff", "#00b3b3", "#ff9933", "#66ff33", "#cc0066",
-    "#3399ff", "#996633", "#893339", "#384c4094"]
+    "#3399ff", "#996633", "#893339", "#384c40"]
 
     if species in species_colors:
         return species_colors[species] # if the species is already used, this will directly assigne the same colour
@@ -625,28 +660,30 @@ def speciescolor(species, species_colors):
 
     return color
 
-# %%
-
-def observations_map(day=None):
+def observations_map(day=None, open_browser=False, geocode_delay=0.1):
     """
     Generates an interactive observation map for moth observations in West Flanders
     input:
         day (str or None)
             Date in format YYYY-MM-DD.
             If None, the current date is used.
+        open_browser (bool)
+            Open the generated map in the default browser when True.
+        geocode_delay (float)
+            Pause in seconds after each geocoding request.
 
     output:
-        None
-            Saves an HTML map file to the output directory
-            and automatically opens the map in the browser.
+        str or None
+            Saves an HTML map file to the output directory and returns its path.
+            Returns None when no data is available.
     """
     if day is None:
         day = date.today().strftime("%Y-%m-%d")
 
     rows = Sdata(day)
     if not rows:
-        return "no data"
-    points = rowstopoints(rows)
+        return None
+    points = rowstopoints(rows, geocode_delay=geocode_delay)
 
     m = folium.Map(location=[51.05, 3.0], zoom_start=9)
 
@@ -658,14 +695,17 @@ def observations_map(day=None):
             continue
 
         color = speciescolor(p["species"], species_colors)
+        popup_species = html.escape(str(p["species"]))
+        popup_location = html.escape(str(p["location"]))
+        popup_date = html.escape(str(p["date"]))
 
         folium.CircleMarker(
             location=[p["lat"], p["lng"]],
             radius=5,
             popup=f"""
-            <b>{p['species']}</b><br>
-            {p['location']}<br>
-            {p['date']}
+            <b>{popup_species}</b><br>
+            {popup_location}<br>
+            {popup_date}
             """,
             color=color,
             fill=True,
@@ -689,6 +729,7 @@ def observations_map(day=None):
     """
 
     for species, color in species_colors.items(): 
+        escaped_species = html.escape(str(species))
         boxhtml += f"""
         <div>
             <span style="
@@ -698,7 +739,7 @@ def observations_map(day=None):
                 background:{color};
                 margin-right:5px;
             "></span>
-            {species}
+            {escaped_species}
         </div>
         """
 
@@ -716,9 +757,11 @@ def observations_map(day=None):
 
     m.save(filepath) # saves the file to the. output- folder
 
-    webbrowser.open(f"file://{os.path.abspath(filepath)}") # opens the webpage 
+    if open_browser:
+        webbrowser.open(f"file://{os.path.abspath(filepath)}") # opens the webpage 
 
-# %%
+    return filepath
+
 def getspecies_name(latinName):  # reused code piiece from getRarity
     """
     Searches waarnemingen.be for a species and returns the species page link
@@ -727,39 +770,27 @@ def getspecies_name(latinName):  # reused code piiece from getRarity
         latinName --> scientific or common name of the species.
 
     output:
-        speciesNameLink --> tull URL to the species page on waarnemingen.be.
+        speciesNameLink --> full URL to the species page on waarnemingen.be.
     Returns an empty string if the species is not found.
     """
 
-    translator = Translator()
-    latinName = translator.translate(latinName, src="en", dest="nl").text
-    latinName = latinName.replace(" ", "+").strip()
-    latinName = latinName.replace("-", "+").strip()
+    href = _species_href_from_search_query(latinName)
+    if href:
+        return _species_link_from_href(href)
 
-    headers = {
-        "User-Agent": "tg"}
-    searchurl = f"https://waarnemingen.be/search/?q={latinName}"
-
-    r = requests.get(searchurl, headers=headers, timeout=REQUEST_TIMEOUT)
-    soup = BeautifulSoup(r.text, "html.parser")
-
-    a = soup.select_one("li.lead a[href^='/species/']")
-    if a is None:
+    if _looks_like_scientific_name(latinName):
         return ""
 
-    href = a["href"]
+    translated_name = _translate_text(latinName, src="en", dest="nl")
+    if translated_name == latinName:
+        return ""
 
-    if not href.endswith("/"):
-        href += "/"
-
-    speciesNameLink = f"https://waarnemingen.be{href}"
-
-    return speciesNameLink
+    href = _species_href_from_search_query(translated_name)
+    return _species_link_from_href(href)
     
 
 
 
-# %%
 def getmonthtoseasonn(month): #classifyingg 
     """
     Converts a numeric month to a meteorological season.
@@ -781,7 +812,6 @@ def getmonthtoseasonn(month): #classifyingg
 
 
 
-# %%
 def observationtble(table):
     """
     Extracts observation data from the observations HTML table
@@ -804,10 +834,10 @@ def observationtble(table):
 
 
         datetext = tds[0].get_text(" ",   strip=True)
-        date = re.search(r"\b(\d{4}-\d{2}-\d{2})\b",datetext) # getting date format with regex
-        if date is None:
+        date_match = re.search(r"\b(\d{4}-\d{2}-\d{2})\b",datetext) # getting date format with regex
+        if date_match is None:
             continue
-        date = date.group(1)
+        observation_date = date_match.group(1)
 
         numbertext = tds[1].get_text(" ", strip=True  ) # addding space 
         nspecies = re.search(r"\b(\d+)\b",numbertext)
@@ -815,11 +845,11 @@ def observationtble(table):
             continue
         count = int(nspecies.group(1)) #num of species convert to int
 
-        month = int(date[5:7])
+        month = int(observation_date[5:7])
         season = getmonthtoseasonn(month) # converting month to seansons
 
         rows.append({
-            "date": date,
+            "date": observation_date,
             "count": count,
             "season": season
         })
@@ -830,8 +860,7 @@ def observationtble(table):
 
 
 
-# %%
-def season(year, species_id):
+def season(year, species_id, request_delay=0.2):
     """
     Scrapes and processes observation data for a specific species
     in West Flanders for a given year
@@ -839,24 +868,20 @@ def season(year, species_id):
     input:
         year --> Year for which observations are collected.
         species_id ---> Species ID extracted from the waarnemingen.be species page.
+        request_delay --> pause in seconds between paginated requests.
     output: data -->  dataframe containing:
             - date (datetime)
             - count (number of observations)
             - season (Winter, Spring, Summer, Autumn)
     if empty:
-            Returns "no data found" if no observations are available.
+            Returns an empty DataFrame with the expected columns.
     """
-
-    headers = {
-        "User-Agent": "TG"}
 
     allrows = []
     page = 1
+    last_page = None
 
     while True:
-        if page == 23:
-            break # can't scrap past pag 23
-        
         url = (
             f"https://waarnemingen.be/species/{species_id}/observations/"
             f"?date_after={year}-01-01"
@@ -865,8 +890,7 @@ def season(year, species_id):
             f"&page={page}"
         )
 
-        r = requests.get(url, headers=headers, timeout=20)
-        r.raise_for_status()
+        r = _http_get(url)
 
         soup = BeautifulSoup(r.text, "html.parser")
         table = soup.select_one("div.table-container table")
@@ -877,11 +901,17 @@ def season(year, species_id):
         rows = observationtble(table)
         if not rows:
             break
-        
-        
+
+        page_signature = [(row["date"], row["count"], row["season"]) for row in rows]
+        if last_page is not None and page_signature == last_page:
+            break
+
+        last_page = page_signature
 
         allrows.extend(rows)
         page += 1
+        if request_delay:
+            time.sleep(request_delay)
         
 
     data = pd.DataFrame(allrows)
@@ -893,8 +923,6 @@ def season(year, species_id):
     data = data.sort_values("date").reset_index(drop=True)
 
     return data
-
-# %%
 
 def seasonal_analysis(species, year):
     """
@@ -938,21 +966,29 @@ def seasonal_analysis(species, year):
     plt.show()
 
     lowest_season = season_summary.idxmin()
-    highestseason = season_summary.idxmax()
+    highest_season = season_summary.idxmax()
 
     together_api_key = os.getenv("TOGETHER_API_KEY")
     if not together_api_key:
         print("TOGETHER_API_KEY not set, skipping LLM explanation.")
         return
 
+    os.environ.setdefault("TOGETHER_NO_BANNER", "1")
+    try:
+        from together import Together
+    except ImportError:
+        print("together package not installed, skipping LLM explanation.")
+        return
+
     client = Together(api_key=together_api_key)
     
-    prompt = (f"{season_summary}"
-        f"The moth species '{species}' has observations lowest in{lowest_season}."
-        f"The moth species '{species}' has observations highest in {highestseason}."
-        f"Explain briefly why this species may be less  or more observed during this season. "
-        f"Use ecological and biological reasoning. Use ecological and biological reasoning. no section, NO emoji just a 6-7 sentence statement explaining the results."
-        f"research a little bit of your own"
+    season_summary_text = season_summary.rename("observations").to_frame().to_string()
+    prompt = (
+        f"Seasonal observation counts for moth species '{species}' in West Flanders during {year}:\n"
+        f"{season_summary_text}\n\n"
+        f"Lowest season: {lowest_season}. Highest season: {highest_season}.\n"
+        "Explain briefly why this species may be less or more observed during these seasons. "
+        "Use ecological and biological reasoning. No section headings or emoji; write one 6-7 sentence statement."
     )
 
     response = client.chat.completions.create(
@@ -965,13 +1001,13 @@ def seasonal_analysis(species, year):
     print("\n")
     print(explanation)
 
-# %%
-def biodiversity_analysis(month=None, year=None):
+def biodiversity_analysis(month=None, year=None, request_delay=0.2):
     """
     Analyzes biodiversity data for a given month in a given year (West Flanders)
     input:
         - month --> integer 
-        - year --> interger 
+        - year --> integer
+        - request_delay --> pause in seconds between daily requests
     output:
         - return CSV summary_df
         - return CSV raw_df 
@@ -997,16 +1033,10 @@ def biodiversity_analysis(month=None, year=None):
         day_str = f"{year:04d}-{month:02d}-{day_num:02d}"
 
         daily_rows = Sdata(day_str)
+        all_rows.extend(daily_rows)
 
-        if daily_rows is None:
-            continue
-
-        if daily_rows == "":
-            continue
-
-        if isinstance(daily_rows, list):
-            for row in daily_rows:
-                all_rows.append(row)
+        if request_delay and day_num < days_in_month:
+            time.sleep(request_delay)
 
     fulldatadf = pd.DataFrame(all_rows)
 
@@ -1043,6 +1073,9 @@ def biodiversity_analysis(month=None, year=None):
 
         summary_df.to_csv(summary_path, index=False)
         fulldatadf.to_csv(raw_path, index=False)
+
+        print("Saved summary CSV:", summary_path)
+        print("Saved raw CSV:", raw_path)
 
         return summary_df, fulldatadf
 

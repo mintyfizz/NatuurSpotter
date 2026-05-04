@@ -13,8 +13,8 @@ It pulls public data from **waarnemingen.be** and can generate CSV summaries, in
 
 ## Requirements
 
-- Python 3.8 to 3.12
-- Internet access (for waarnemingen.be, Wikimedia, Wikipedia, Geoapify, Together)
+- Python 3.8 or newer
+- Internet access (for waarnemingen.be, Wikimedia, Wikipedia, Geoapify, and optionally Together)
 
 ## Installation
 
@@ -28,6 +28,14 @@ Or install as a package:
 
 ```bash
 pip install -e .
+```
+
+Install the optional Together dependency only when you need the LLM explanation in `seasonal_analysis`:
+
+```bash
+pip install -e ".[llm]"
+# or, when using requirements.txt:
+pip install "together>=2.0"
 ```
 
 ## Environment Variables
@@ -55,7 +63,7 @@ from natuurspotter import biodiversity_analysis, observations_map, species_info,
 summary_df, raw_df = biodiversity_analysis(month=1, year=2026)
 
 # Interactive map in ./output/observations_map_YYYY-MM-DD.html
-observations_map(day="2026-01-22")
+map_path = observations_map(day="2026-01-22")
 
 # PDF species report in ./output/
 species_info("Agrotis segetum")
@@ -94,7 +102,6 @@ NatuurSpotter/
 │       └── fonts/
 ├── requirements.txt
 ├── pyproject.toml
-├── setup.py
 ├── scripts/
 │   └── run_natuurspotter.py
 ├── examples/

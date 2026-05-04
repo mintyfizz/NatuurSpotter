@@ -2,10 +2,9 @@ wikipedia
 requests
 beautifulsoup4
 pandas>=2.0
-googletrans==4.0.0rc1
+googletrans>=4.0.2,<5
 fpdf2
 folium
 matplotlib>=3.8
-together
 pillow
 python-dotenv
