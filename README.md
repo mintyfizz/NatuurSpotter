@@ -1,195 +1,171 @@
 # NatuurSpotter
 
-**NatuurSpotter** is a Python library for collecting and analysing moth observation data in **West Flanders, Belgium**.
-It pulls public data from [waarnemingen.be](https://waarnemingen.be) and produces CSV biodiversity summaries, interactive HTML maps, species PDF reports, and seasonal charts — with an optional LLM-powered ecological explanation.
+NatuurSpotter is a Python package for collecting and analysing public moth observation data from
+[waarnemingen.be](https://waarnemingen.be), focused on West Flanders, Belgium.
+
+It can create biodiversity summary CSV files, interactive observation maps, species PDF reports, and seasonal
+observation charts. An optional LLM integration can add a short ecological interpretation to seasonal analyses.
 
 [![PyPI version](https://img.shields.io/pypi/v/natuurspotter)](https://pypi.org/project/natuurspotter/)
 [![Python versions](https://img.shields.io/pypi/pyversions/natuurspotter)](https://pypi.org/project/natuurspotter/)
+[![CI](https://github.com/mintyfizz/NatuurSpotter/actions/workflows/ci.yml/badge.svg)](https://github.com/mintyfizz/NatuurSpotter/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![CI](https://github.com/mintyfizz/NatuurSpotter-1/actions/workflows/ci.yml/badge.svg)](https://github.com/mintyfizz/NatuurSpotter-1/actions/workflows/ci.yml)
-
----
-
-## Table of Contents
-
-- [Features](#features)
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [Quick Start](#quick-start)
-- [Output Files](#output-files)
-- [Function Reference](#function-reference)
-- [Notes](#notes)
-- [Contributing](#contributing)
-- [License](#license)
-
----
 
 ## Features
 
-- Scrape day-by-day moth observations for West Flanders
-- Generate monthly biodiversity summaries (CSV) with Shannon/Simpson diversity indices
-- Build interactive observation maps (HTML) with per-species colour coding
-- Create species PDF reports with image, description, rarity status, and recent observations
-- Run seasonal analysis with bar charts and an optional LLM ecological explanation
-
----
+- Collect moth observations from waarnemingen.be for West Flanders.
+- Generate monthly biodiversity summaries with species richness, Shannon diversity, and Simpson diversity.
+- Save raw observation exports for downstream analysis.
+- Build Folium HTML maps with geocoded observation points.
+- Create PDF species reports with descriptions, images, rarity status, and recent observations.
+- Plot seasonal observation patterns for a species.
+- Optionally generate an LLM-based ecological explanation when a Together API key is configured.
 
 ## Installation
 
-Install from [PyPI](https://pypi.org/project/natuurspotter/) using pip:
+Install the package from PyPI:
 
 ```bash
-pip install --upgrade natuurspotter
+python -m pip install natuurspotter
 ```
 
-To include the optional LLM explanation feature:
+Install the optional LLM dependency only if you want `seasonal_analysis()` to produce an AI-generated explanation:
 
 ```bash
-pip install --upgrade "natuurspotter[llm]"
+python -m pip install "natuurspotter[llm]"
 ```
 
-**Requires Python 3.9 or newer.**
+NatuurSpotter requires Python 3.9 or newer.
 
----
+Verify the installation:
+
+```bash
+python -c "import natuurspotter; print(natuurspotter.__version__)"
+```
 
 ## Configuration
 
-NatuurSpotter reads API keys from environment variables. Create a `.env` file in your project directory:
+NatuurSpotter reads API keys from environment variables. For local development, place them in a `.env` file in your
+working directory:
 
 ```env
-GEOAPIFY_API_KEY=your_key_here      # required for observations_map()
-TOGETHER_API_KEY=your_key_here      # optional — only for LLM feature in seasonal_analysis()
+GEOAPIFY_API_KEY=your_geoapify_key_here
+TOGETHER_API_KEY=your_together_key_here
 ```
 
-| Key | Required | Purpose | Get one at |
-|-----|----------|---------|------------|
-| `GEOAPIFY_API_KEY` | Yes (for maps) | Geocoding observation locations | [geoapify.com](https://www.geoapify.com/) |
-| `TOGETHER_API_KEY` | No | LLM ecological explanation | [together.ai](https://www.together.ai/) |
+| Variable | Required | Used by | Purpose |
+| --- | --- | --- | --- |
+| `GEOAPIFY_API_KEY` | Only for maps | `observations_map()` | Geocodes observation locations through Geoapify. |
+| `TOGETHER_API_KEY` | Optional | `seasonal_analysis()` | Enables the optional LLM ecological explanation. |
 
-Keys are never hard-coded and are loaded automatically via [`python-dotenv`](https://pypi.org/project/python-dotenv/).
-
----
+The package never requires API keys for installation. Keys are only needed when you call features that depend on
+external services.
 
 ## Quick Start
 
 ```python
-from natuurspotter import biodiversity_analysis, observations_map, species_info, seasonal_analysis
+from natuurspotter import (
+    biodiversity_analysis,
+    observations_map,
+    seasonal_analysis,
+    species_info,
+)
 
-# Monthly biodiversity CSV — saved to ./output/
+# Save monthly biodiversity summary and raw observation CSV files.
 summary_df, raw_df = biodiversity_analysis(month=1, year=2025)
 
-# Interactive observation map for a single day — saved to ./output/
+# Save an interactive HTML map for one observation day.
 map_path = observations_map(day="2025-01-22")
 
-# PDF species report — saved to ./output/
+# Save a species PDF report.
 species_info("Agrotis segetum")
 
-# Seasonal bar chart + optional LLM explanation (requires TOGETHER_API_KEY)
+# Show a seasonal observation chart for a species.
 seasonal_analysis("Agrotis segetum", 2025)
 ```
 
-All output is written to an `output/` folder in your current working directory.
+By default, generated files are written to an `output/` directory under the current working directory.
 
----
+## Generated Files
 
-## Output Files
-
-| Function | Output file |
-|----------|-------------|
+| Function | Output |
+| --- | --- |
 | `biodiversity_analysis()` | `output/biodiversity_summary_<year>-<month>.csv` |
 | `biodiversity_analysis()` | `output/biodiversity_raw_<year>-<month>.csv` |
 | `observations_map()` | `output/observations_map_<date>.html` |
 | `species_info()` | `output/<species_name>.pdf` |
 
----
-
-## Function Reference
+## Recommended API
 
 ### `biodiversity_analysis(month, year, request_delay=0.2)`
 
-Scrapes all moth observations for the given month and year in West Flanders.
-Returns `(summary_df, raw_df)` and writes two CSV files to `output/`.
+Collects daily moth observations for a month, computes biodiversity metrics, saves CSV files, and returns
+`(summary_df, raw_df)`.
 
 ```python
-summary_df, raw_df = biodiversity_analysis(month=3, year=2025)
-print(summary_df[["species_richness", "shannon_diversity"]])
+summary_df, raw_df = biodiversity_analysis(month=6, year=2025)
 ```
-
-The summary CSV includes: total observations, species richness, unique locations, most-observed species, Shannon diversity index, and Simpson diversity index.
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `month` | `int` | — | Month number (1–12) |
-| `year` | `int` | — | Four-digit year |
-| `request_delay` | `float` | `0.2` | Seconds between HTTP requests |
-
----
 
 ### `observations_map(day, open_browser=False, geocode_delay=0.1)`
 
-Generates an interactive Folium map of all moth observations for a given date.
-Returns the path to the saved HTML file, or `None` if no data is available.
+Creates an interactive HTML map for observations on a single date. Returns the saved HTML path, or `None` when no
+observations are available.
 
 ```python
-map_path = observations_map(day="2025-06-15")
+map_path = observations_map(day="2025-06-15", open_browser=False)
 ```
 
-Requires `GEOAPIFY_API_KEY`.
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `day` | `str` | — | Date in `YYYY-MM-DD` format |
-| `open_browser` | `bool` | `False` | Open the map in a browser after saving |
-| `geocode_delay` | `float` | `0.1` | Seconds between geocoding requests |
-
----
+This function requires `GEOAPIFY_API_KEY`.
 
 ### `species_info(latinName)`
 
-Fetches species information from waarnemingen.be and Wikipedia, then writes a PDF report
-with an image, description, rarity status, and a table of recent West Flanders observations.
+Creates a PDF report for a species using its scientific name.
 
 ```python
 species_info("Agrotis segetum")
 ```
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `latinName` | `str` | Latin (scientific) species name |
-
----
-
 ### `seasonal_analysis(species, year)`
 
-Plots a seasonal bar chart of observation counts for a species in West Flanders.
-If `TOGETHER_API_KEY` is set, also prints a short LLM-generated ecological explanation.
+Plots seasonal observation counts for a species. If `TOGETHER_API_KEY` is set and the `llm` extra is installed, it
+also prints a short ecological explanation.
 
 ```python
 seasonal_analysis("Agrotis segetum", 2025)
 ```
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `species` | `str` | Latin (scientific) species name |
-| `year` | `int` | Four-digit year |
+## Operational Notes
 
----
+- Observation data is scraped from waarnemingen.be. If the site changes its HTML structure, scraping functions may
+  need updates.
+- Geographic filtering is focused on West Flanders.
+- Network-facing functions use a package User-Agent and request throttling where repeated requests are expected.
+- `observations_map()` does not open a browser unless `open_browser=True` is passed.
+- The package is intended for research, education, and lightweight ecological reporting workflows.
 
-## Notes
+## Development
 
-- Observation data comes from [waarnemingen.be](https://waarnemingen.be). If the site's HTML structure changes, scraping functions may need updates.
-- Geographic filtering is restricted to West Flanders (province code `15`).
-- API keys are read from environment variables and never hard-coded.
+Clone the repository and install the package in editable mode with development tools:
 
----
+```bash
+git clone https://github.com/mintyfizz/NatuurSpotter.git
+cd NatuurSpotter
+python -m pip install -e ".[dev]"
+```
 
-## Contributing
+Run the test suite and lint checks:
 
-Contributions are welcome. Please open an issue or pull request on [GitHub](https://github.com/mintyfizz/NatuurSpotter-1).
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+```bash
+pytest
+ruff check .
+```
 
----
+## Project Links
+
+- PyPI: [https://pypi.org/project/natuurspotter/](https://pypi.org/project/natuurspotter/)
+- Source: [https://github.com/mintyfizz/NatuurSpotter](https://github.com/mintyfizz/NatuurSpotter)
+- Issues: [https://github.com/mintyfizz/NatuurSpotter/issues](https://github.com/mintyfizz/NatuurSpotter/issues)
 
 ## License
 
-Distributed under the [MIT License](LICENSE).
+NatuurSpotter is distributed under the [MIT License](LICENSE).
