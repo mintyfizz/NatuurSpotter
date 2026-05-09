@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pandas as pd
+from bs4 import BeautifulSoup
 from PIL import Image
 
 from natuurspotter import core
@@ -258,6 +259,52 @@ class CoreRegressionTests(unittest.TestCase):
 
         self.assertEqual(len(image_paths), 1)
         self.assertFalse(Path(image_paths[0]).exists())
+
+    def test_observationtble_parses_rows_and_derives_seasons(self):
+        table_html = """
+        <table>
+            <tbody>
+                <tr><td>Observed on 2026-01-15</td><td>7 observations</td></tr>
+                <tr><td>Observed on 2026-07-03</td><td>12 observations</td></tr>
+            </tbody>
+        </table>
+        """
+        table = BeautifulSoup(table_html, "html.parser").find("table")
+
+        rows = core.observationtble(table)
+
+        self.assertEqual(rows, [
+            {"date": "2026-01-15", "count": 7, "season": "Winter"},
+            {"date": "2026-07-03", "count": 12, "season": "Summer"},
+        ])
+
+    def test_seasonal_analysis_notebook_path_skips_llm_without_key(self):
+        season_df = pd.DataFrame({
+            "date": pd.to_datetime(["2026-01-01", "2026-06-01"]),
+            "count": [2, 5],
+            "season": ["Winter", "Summer"],
+        })
+
+        with patch.object(core, "getspecies_name", return_value="https://waarnemingen.be/species/123/test/"), patch.object(
+            core,
+            "season",
+            return_value=season_df,
+        ) as season_call, patch.object(core.os, "getenv", return_value=""), patch.object(core.plt, "show") as show, patch(
+            "builtins.print"
+        ) as printed:
+            result = core.seasonal_analysis("Koolbladroller", 2026)
+
+        self.assertIsNone(result)
+        season_call.assert_called_once_with(2026, "123")
+        show.assert_called_once()
+        printed.assert_any_call("TOGETHER_API_KEY not set, skipping LLM explanation.")
+
+    def test_seasonal_analysis_notebook_path_reports_missing_species(self):
+        with patch.object(core, "getspecies_name", return_value=""), patch("builtins.print") as printed:
+            result = core.seasonal_analysis("Unknown species", 2026)
+
+        self.assertIsNone(result)
+        printed.assert_any_call("species not found")
 
     def test_biodiversity_empty_branch_prints_saved_paths(self):
         with tempfile.TemporaryDirectory() as tmpdir, patch.object(core.os, "getcwd", return_value=tmpdir), patch.object(
